@@ -1,0 +1,13 @@
+# Local Compose overrides may contain secrets.
+.env
+
+# Generated application dependencies and build output.
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Local test and coverage output.
+coverage/
+*.out
+playwright-report/
+test-results/

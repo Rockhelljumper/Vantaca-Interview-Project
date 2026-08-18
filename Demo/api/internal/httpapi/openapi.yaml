@@ -1,0 +1,740 @@
+openapi: 3.0.3
+info:
+  title: Vantaca Northwind Integration Demo API
+  version: 0.1.0-demo
+  description: |
+    Executable contract for the synthetic Vantaca-facing Go API used by the
+    interview demo. Northwind remains authoritative; this API exposes a
+    tenant-scoped SQL read model, bounded reconciliation controls, durable
+    transfer intent, webhook ingestion, and explicit ambiguous outcomes.
+
+    This is demo evidence, not a production authorization or Northwind
+    certification. Use only the synthetic values documented below.
+  contact:
+    name: Vantaca Northwind Interview Demo
+servers:
+  - url: http://localhost:{port}
+    description: Local Compose Vantaca API
+    variables:
+      port:
+        default: "18080"
+        description: VANTACA_API_HOST_PORT from the root Compose environment
+tags:
+  - name: Documentation
+  - name: Operations
+  - name: Demo metadata
+  - name: Accounts
+  - name: Transactions
+  - name: Transfers
+  - name: Webhooks
+  - name: Demo controls
+  - name: Internal
+paths:
+  /openapi.yaml:
+    get:
+      tags: [Documentation]
+      summary: Download this OpenAPI document
+      operationId: getCoreOpenAPI
+      responses:
+        "200":
+          description: OpenAPI YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /healthz:
+    get:
+      tags: [Operations]
+      summary: Check API and SQL Server health
+      operationId: getHealth
+      responses:
+        "200":
+          description: API and database are ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/demo/info:
+    get:
+      tags: [Demo metadata]
+      summary: Describe demo assumptions and production blockers
+      operationId: getDemoInfo
+      security:
+        - DemoTenant: []
+      responses:
+        "200":
+          description: Demo metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoInfo"
+        "403":
+          $ref: "#/components/responses/TenantForbidden"
+  /api/accounts:
+    get:
+      tags: [Accounts]
+      summary: List linked account snapshots from SQL
+      description: Full account and routing numbers are intentionally absent.
+      operationId: listAccounts
+      security:
+        - DemoTenant: []
+      responses:
+        "200":
+          description: Tenant-scoped account snapshots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accounts, source]
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Account"
+                  source:
+                    type: string
+                    example: Vantaca SQL read model
+        "403":
+          $ref: "#/components/responses/TenantForbidden"
+  /api/accounts/{id}/transactions:
+    get:
+      tags: [Transactions]
+      summary: Read recent SQL transactions and optionally schedule comparison
+      description: |
+        Returns the current SQL snapshot immediately. Unless `refresh=false`, a
+        bounded background comparison with Northwind is scheduled. Consumers
+        re-fetch only after the SQL content version advances.
+      operationId: getRecentTransactions
+      security:
+        - DemoTenant: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+        - name: refresh
+          in: query
+          description: Set false to read SQL without scheduling Northwind comparison.
+          schema:
+            type: boolean
+            default: true
+        - name: scenario
+          in: query
+          description: Synthetic safe-read behavior. Use only with refresh enabled.
+          schema:
+            $ref: "#/components/schemas/ReadScenario"
+      responses:
+        "200":
+          description: Current transaction snapshot and refresh state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionSnapshot"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/TenantForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/transfers:
+    get:
+      tags: [Transfers]
+      summary: List durable transfer requests
+      operationId: listTransfers
+      security:
+        - DemoTenant: []
+      responses:
+        "200":
+          description: Newest transfer requests first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transfers]
+                properties:
+                  transfers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Transfer"
+        "403":
+          $ref: "#/components/responses/TenantForbidden"
+    post:
+      tags: [Transfers]
+      summary: Persist and submit one transfer intent
+      description: |
+        Persists a unique Vantaca request identity before making exactly one
+        Northwind POST attempt. Ambiguous monetary outcomes become `UNKNOWN`
+        and are never automatically resubmitted.
+      operationId: submitTransfer
+      security:
+        - DemoTenant: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitTransferRequest"
+            example:
+              request_id: swagger-demo-request-0001
+              from_account_id: acc_1029
+              to_account_id: acc_2042
+              amount: "25.00"
+              currency: USD
+              scenario: ""
+      responses:
+        "202":
+          description: Durable transfer state; not necessarily completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transfer"
+        "403":
+          $ref: "#/components/responses/TenantForbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /api/webhooks/northwind:
+    post:
+      tags: [Webhooks]
+      summary: Receive a synthetic Northwind transfer update
+      description: |
+        The supplied contract has no signature. In this demo, unsigned webhook
+        input is stored idempotently and used only as a signal to reconcile from
+        a partner read; it is not trusted as authoritative state.
+      operationId: receiveNorthwindWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEvent"
+            example:
+              event: transfer.updated
+              transfer_id: trf_demo_example
+              status: POSTED
+      responses:
+        "200":
+          description: Duplicate delivery acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookOutcome"
+        "202":
+          description: Receipt stored and reconciliation attempted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookOutcome"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/demo/sync:
+    post:
+      tags: [Demo controls]
+      summary: Synchronize all linked accounts and transactions
+      operationId: synchronizeDemo
+      security:
+        - DemoTenant: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncRequest"
+      responses:
+        "200":
+          description: Synchronization completed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [result]
+                properties:
+                  result:
+                    $ref: "#/components/schemas/SyncResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/TenantForbidden"
+        "502":
+          description: Northwind failure; SQL snapshot preserved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Error"
+                  - type: object
+                    properties:
+                      result:
+                        $ref: "#/components/schemas/SyncResult"
+  /api/demo/accounts/{id}/external-activity:
+    post:
+      tags: [Demo controls]
+      summary: Add a synthetic transaction directly in Northwind
+      description: Only open accounts may receive synthetic external activity.
+      operationId: simulateExternalActivity
+      security:
+        - DemoTenant: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "201":
+          description: Northwind changed; SQL has not yet refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, transaction]
+                properties:
+                  message:
+                    type: string
+                  transaction:
+                    $ref: "#/components/schemas/Transaction"
+        "403":
+          $ref: "#/components/responses/TenantForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /api/demo/transfers/{id}/advance:
+    post:
+      tags: [Demo controls]
+      summary: Advance a known mock transfer and deliver webhooks
+      operationId: advanceDemoTransfer
+      security:
+        - DemoTenant: []
+      parameters:
+        - $ref: "#/components/parameters/TransferID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdvanceTransferRequest"
+      responses:
+        "200":
+          description: Reconciled transfer state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transfer"
+        "403":
+          $ref: "#/components/responses/TenantForbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "502":
+          $ref: "#/components/responses/UpstreamFailed"
+  /api/internal/reconcile:
+    post:
+      tags: [Internal]
+      summary: Run account and known-transfer reconciliation
+      description: Synthetic internal automation boundary used by the optional n8n profile.
+      operationId: reconcileInternal
+      security:
+        - DemoAdminKey: []
+      responses:
+        "200":
+          description: Reconciliation completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconcileResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: Partial reconciliation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconcileResult"
+components:
+  securitySchemes:
+    DemoTenant:
+      type: apiKey
+      in: header
+      name: X-Demo-Tenant
+      description: Use the synthetic value `tenant_demo`.
+    DemoAdminKey:
+      type: apiKey
+      in: header
+      name: X-Demo-Admin-Key
+      description: Use the synthetic local value configured by DEMO_ADMIN_KEY.
+  parameters:
+    AccountID:
+      name: id
+      in: path
+      required: true
+      description: Opaque Northwind account identifier stored by Vantaca.
+      schema:
+        type: string
+      example: acc_1029
+    TransferID:
+      name: id
+      in: path
+      required: true
+      description: Vantaca's durable internal transfer UUID.
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Malformed JSON, schema, scenario, or query value
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid admin key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TenantForbidden:
+      description: Missing or invalid synthetic tenant context
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Requested account or transfer was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationFailed:
+      description: Safety or domain validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: SQL Server is unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UpstreamFailed:
+      description: Synthetic Northwind control failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Health:
+      type: object
+      required: [status, database]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        database:
+          type: string
+          enum: [connected]
+    DemoInfo:
+      type: object
+      required:
+        - mode
+        - customer_id
+        - northwind_authoritative
+        - read_model
+        - demo_controls_enabled
+        - unsigned_webhook_mode
+        - transfer_submission_enabled
+        - production_blockers
+        - demo_assumptions
+      properties:
+        mode:
+          type: string
+          enum: [demo]
+        customer_id:
+          type: string
+          example: customer_demo
+        northwind_authoritative:
+          type: boolean
+        read_model:
+          type: string
+          example: SQL Server 2022
+        demo_controls_enabled:
+          type: boolean
+        unsigned_webhook_mode:
+          type: boolean
+        transfer_submission_enabled:
+          type: boolean
+        production_blockers:
+          type: array
+          items:
+            type: string
+        demo_assumptions:
+          type: array
+          items:
+            type: string
+    Freshness:
+      type: object
+      required: [state, fetched_at, checked_at, last_error, policy_label]
+      properties:
+        state:
+          type: string
+          enum: [current, stale, degraded]
+        fetched_at:
+          type: string
+          format: date-time
+        checked_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+          nullable: true
+          example: partner_unavailable
+        policy_label:
+          type: string
+    Account:
+      type: object
+      required: [id, display_name, type, last_four, balance, currency, status, version, freshness]
+      properties:
+        id:
+          type: string
+          example: acc_1029
+        display_name:
+          type: string
+          example: Checking ••••4321
+        type:
+          type: string
+          enum: [checking, savings]
+        last_four:
+          type: string
+          pattern: "^[0-9]{4}$"
+          example: "4321"
+        balance:
+          $ref: "#/components/schemas/MoneyString"
+        currency:
+          type: string
+          enum: [USD]
+        status:
+          type: string
+          enum: [open, closed]
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        freshness:
+          $ref: "#/components/schemas/Freshness"
+    Transaction:
+      type: object
+      required: [id, amount, currency, description, merchant_category_code, posted_at]
+      properties:
+        id:
+          type: string
+        amount:
+          $ref: "#/components/schemas/SignedMoneyString"
+        currency:
+          type: string
+          enum: [USD]
+        description:
+          type: string
+        merchant_category_code:
+          type: string
+          nullable: true
+          pattern: "^[0-9]{4}$"
+        posted_at:
+          type: string
+          format: date-time
+    TransactionSnapshot:
+      type: object
+      required: [account, transactions, version, refresh_started, refreshing, invalidation]
+      properties:
+        account:
+          $ref: "#/components/schemas/Account"
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+        version:
+          type: integer
+          format: int64
+        refresh_started:
+          type: boolean
+        refreshing:
+          type: boolean
+        invalidation:
+          type: string
+          enum: [bounded version polling]
+    Transfer:
+      type: object
+      required:
+        - id
+        - request_id
+        - from_account_id
+        - to_account_id
+        - from_display
+        - to_display
+        - amount
+        - currency
+        - status
+        - partner_transfer_id
+        - error_category
+        - message
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        request_id:
+          type: string
+        from_account_id:
+          type: string
+        to_account_id:
+          type: string
+        from_display:
+          type: string
+        to_display:
+          type: string
+        amount:
+          $ref: "#/components/schemas/MoneyString"
+        currency:
+          type: string
+          enum: [USD]
+        status:
+          $ref: "#/components/schemas/TransferStatus"
+        partner_transfer_id:
+          type: string
+          nullable: true
+        error_category:
+          type: string
+          nullable: true
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SubmitTransferRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id, from_account_id, to_account_id, amount, currency]
+      properties:
+        request_id:
+          type: string
+          minLength: 8
+          maxLength: 100
+          pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{7,99}$"
+        from_account_id:
+          type: string
+          example: acc_1029
+        to_account_id:
+          type: string
+          example: acc_2042
+        amount:
+          $ref: "#/components/schemas/MoneyString"
+        currency:
+          type: string
+          enum: [USD]
+        scenario:
+          $ref: "#/components/schemas/TransferScenario"
+    SyncRequest:
+      type: object
+      additionalProperties: false
+      required: [scenario]
+      properties:
+        scenario:
+          $ref: "#/components/schemas/ReadScenario"
+    SyncResult:
+      type: object
+      required: [accounts_seen, accounts_changed, transaction_sets_seen, transaction_changes, partial]
+      properties:
+        accounts_seen:
+          type: integer
+        accounts_changed:
+          type: integer
+        transaction_sets_seen:
+          type: integer
+        transaction_changes:
+          type: integer
+        partial:
+          type: boolean
+    AdvanceTransferRequest:
+      type: object
+      additionalProperties: false
+      required: [status, deliveries]
+      properties:
+        status:
+          type: string
+          enum: [POSTED, FAILED, RETURNED]
+        deliveries:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 1
+    WebhookEvent:
+      type: object
+      additionalProperties: false
+      required: [event, transfer_id, status]
+      properties:
+        event:
+          type: string
+          enum: [transfer.updated]
+        transfer_id:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, POSTED, FAILED, RETURNED]
+    WebhookOutcome:
+      type: object
+      required: [status, trusted]
+      properties:
+        status:
+          type: string
+          enum: [duplicate_acknowledged, reconciled_from_partner_read, recorded_reconciliation_required]
+        trusted:
+          type: boolean
+          enum: [false]
+    ReconcileResult:
+      type: object
+      required: [status, sync, transfer_updates]
+      properties:
+        status:
+          type: string
+          enum: [complete, partial]
+        sync:
+          $ref: "#/components/schemas/SyncResult"
+        transfer_updates:
+          type: integer
+    ReadScenario:
+      type: string
+      enum: ["", "429", "500", "503", latency]
+      default: ""
+    TransferScenario:
+      type: string
+      enum: ["", "500", "503", latency, post-commit-timeout]
+      default: ""
+    TransferStatus:
+      type: string
+      enum: [INTENT_RECORDED, PENDING, POSTED, FAILED, RETURNED, UNKNOWN]
+    MoneyString:
+      type: string
+      description: Exact decimal money serialized as a two-decimal string.
+      pattern: "^[0-9]+\\.[0-9]{2}$"
+      example: "25.00"
+    SignedMoneyString:
+      type: string
+      description: Exact signed decimal money serialized as a two-decimal string.
+      pattern: "^-?[0-9]+\\.[0-9]{2}$"
+      example: "-42.17"
+    Error:
+      type: object
+      required: [error, message, correlation_id]
+      properties:
+        error:
+          type: string
+          example: transfer_validation_failed
+        message:
+          type: string
+        correlation_id:
+          type: string

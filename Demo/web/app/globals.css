@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --vantaca-navy: #153c4f;
+  --vantaca-blue: #01679b;
+  --vantaca-green: #63b249;
+  --vantaca-ink: #212121;
+  --vantaca-muted: #5f7380;
+  --vantaca-line: #dce5ea;
+  --vantaca-surface: #f5f6f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--vantaca-surface);
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 4% 2%, rgba(99, 178, 73, 0.1), transparent 26rem),
+    radial-gradient(circle at 98% 8%, rgba(1, 103, 155, 0.1), transparent 30rem),
+    linear-gradient(180deg, #ffffff 0, var(--vantaca-surface) 24rem);
+  color: var(--vantaca-ink);
+  font-family: "Montserrat Variable", Montserrat, Verdana, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(1, 103, 155, 0.3);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(99, 178, 73, 0.25);
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+input,
+select {
+  color: var(--vantaca-ink);
+}
+
+input::placeholder {
+  color: #7c98a8;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #9fb3bf;
+  background-clip: padding-box;
+}

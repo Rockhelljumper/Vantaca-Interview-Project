@@ -1,0 +1,500 @@
+openapi: 3.0.3
+info:
+  title: Northwind Connect Deterministic Mock API
+  version: 1.4.0-mock
+  description: |
+    Executable local mock of the supplied Northwind Connect v1 developer guide.
+    The `/v1` operations preserve the documented query-key authentication,
+    bare-array pagination, money fields, transfer states, and error shapes.
+
+    Operations under `/__mock` are deterministic interview controls and are
+    never part of the production partner contract. All data and credentials in
+    this service are synthetic.
+  contact:
+    name: Vantaca Northwind Interview Demo
+servers:
+  - url: http://localhost:{port}
+    description: Local Compose Northwind mock
+    variables:
+      port:
+        default: "8081"
+        description: NORTHWIND_MOCK_HOST_PORT from the root Compose environment
+tags:
+  - name: Documentation
+  - name: Operations
+  - name: Northwind accounts
+  - name: Northwind transactions
+  - name: Northwind transfers
+  - name: Mock controls
+paths:
+  /openapi.yaml:
+    get:
+      tags: [Documentation]
+      summary: Download this OpenAPI document
+      operationId: getNorthwindMockOpenAPI
+      security: []
+      responses:
+        "200":
+          description: OpenAPI YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /healthz:
+    get:
+      tags: [Operations]
+      summary: Check mock process health
+      operationId: getNorthwindMockHealth
+      security: []
+      responses:
+        "200":
+          description: Mock is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+  /v1/accounts:
+    get:
+      tags: [Northwind accounts]
+      summary: List linked Northwind accounts
+      operationId: listNorthwindAccounts
+      security:
+        - NorthwindApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Scenario"
+      responses:
+        "200":
+          description: Bare array for the requested page
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 50
+                items:
+                  $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /v1/accounts/{id}/transactions:
+    get:
+      tags: [Northwind transactions]
+      summary: List transactions for one Northwind account
+      operationId: listNorthwindTransactions
+      security:
+        - NorthwindApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Scenario"
+      responses:
+        "200":
+          description: Bare transaction array for the requested page
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 50
+                items:
+                  $ref: "#/components/schemas/Transaction"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /v1/transfers:
+    get:
+      tags: [Northwind transfers]
+      summary: List Northwind transfers
+      operationId: listNorthwindTransfers
+      security:
+        - NorthwindApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Scenario"
+      responses:
+        "200":
+          description: Bare transfer array for the requested page
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 50
+                items:
+                  $ref: "#/components/schemas/Transfer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    post:
+      tags: [Northwind transfers]
+      summary: Initiate one synthetic ACH transfer
+      description: |
+        This supplied partner contract does not document an idempotency key.
+        The Vantaca demo therefore makes one attempt and treats any ambiguous
+        transport outcome conservatively.
+      operationId: createNorthwindTransfer
+      security:
+        - NorthwindApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/TransferScenario"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferRequest"
+            example:
+              from_account_number: "000123454321"
+              to_account_number: "000987656789"
+              routing_number: "021000021"
+              amount: 25.00
+              currency: USD
+      responses:
+        "200":
+          description: Northwind accepted the transfer as pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transfer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /__mock/accounts/{id}/transactions:
+    post:
+      tags: [Mock controls]
+      summary: Add activity outside Vantaca
+      description: Demo-only control; never call this path from production code.
+      operationId: addMockExternalTransaction
+      security:
+        - NorthwindApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/AccountID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExternalTransactionRequest"
+            example:
+              amount: 125.50
+              description: EXTERNAL DEMO DEPOSIT
+              merchant_category_code: "0000"
+      responses:
+        "201":
+          description: Account balance and transaction changed in mock memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExternalTransactionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /__mock/transfers/{id}/status:
+    post:
+      tags: [Mock controls]
+      summary: Advance a transfer and deliver one or more webhooks
+      description: Demo-only control; valid lifecycle transitions are enforced.
+      operationId: updateMockTransferStatus
+      security:
+        - NorthwindApiKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: trf_demo_55120
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StatusUpdateRequest"
+      responses:
+        "200":
+          description: Updated transfer and successful delivery count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusUpdateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          description: Transfer changed but configured webhook delivery failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    NorthwindApiKey:
+      type: apiKey
+      in: query
+      name: api_key
+      description: Use the synthetic value `northwind_mock_local_key`.
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: One-based page number; each page contains at most 50 records.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    AccountID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: acc_1029
+    Scenario:
+      name: X-Northwind-Mock-Scenario
+      in: header
+      required: false
+      description: Deterministic response behavior for safe read operations.
+      schema:
+        type: string
+        enum: ["429", "500", "503", latency]
+    TransferScenario:
+      name: X-Northwind-Mock-Scenario
+      in: header
+      required: false
+      description: Deterministic response behavior, including a committed transfer whose response is lost.
+      schema:
+        type: string
+        enum: ["429", "500", "503", latency, post-commit-timeout]
+  responses:
+    BadRequest:
+      description: Malformed JSON, field, page, scenario, or lifecycle transition
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid api_key query parameter
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Account or transfer does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Synthetic rate limit; Retry-After is one second
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds before a safe request may be retried
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerError:
+      description: Synthetic Northwind server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unavailable:
+      description: Synthetic Northwind maintenance outage
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Account:
+      type: object
+      required: [id, account_number, routing_number, type, balance, currency, status]
+      properties:
+        id:
+          type: string
+          example: acc_1029
+        account_number:
+          type: string
+          pattern: "^[0-9]+$"
+          example: "000123454321"
+        routing_number:
+          type: string
+          pattern: "^[0-9]{9}$"
+          example: "021000021"
+        type:
+          type: string
+          enum: [checking, savings]
+        balance:
+          $ref: "#/components/schemas/SignedMoneyNumber"
+        currency:
+          type: string
+          enum: [USD]
+        status:
+          type: string
+          enum: [open, closed]
+    Transaction:
+      type: object
+      required: [id, amount, currency, description, posted_at]
+      properties:
+        id:
+          type: string
+          example: txn_88213
+        amount:
+          $ref: "#/components/schemas/SignedMoneyNumber"
+        currency:
+          type: string
+          enum: [USD]
+        description:
+          type: string
+          maxLength: 120
+        merchant_category_code:
+          type: string
+          pattern: "^[0-9]{4}$"
+        posted_at:
+          type: string
+          format: date-time
+    TransferRequest:
+      type: object
+      additionalProperties: false
+      required: [from_account_number, to_account_number, routing_number, amount, currency]
+      properties:
+        from_account_number:
+          type: string
+          example: "000123454321"
+        to_account_number:
+          type: string
+          example: "000987656789"
+        routing_number:
+          type: string
+          pattern: "^[0-9]{9}$"
+          example: "021000021"
+        amount:
+          $ref: "#/components/schemas/MoneyNumber"
+        currency:
+          type: string
+          enum: [USD]
+    Transfer:
+      type: object
+      required: [id, status, amount, created_at]
+      properties:
+        id:
+          type: string
+          example: trf_demo_55120
+        status:
+          $ref: "#/components/schemas/TransferStatus"
+        amount:
+          $ref: "#/components/schemas/MoneyNumber"
+        created_at:
+          type: string
+          format: date-time
+    ExternalTransactionRequest:
+      type: object
+      additionalProperties: false
+      required: [amount, description]
+      properties:
+        amount:
+          $ref: "#/components/schemas/SignedMoneyNumber"
+        description:
+          type: string
+          minLength: 1
+          maxLength: 120
+        merchant_category_code:
+          type: string
+          pattern: "^[0-9]{4}$"
+    ExternalTransactionResponse:
+      type: object
+      required: [account, transaction]
+      properties:
+        account:
+          $ref: "#/components/schemas/Account"
+        transaction:
+          $ref: "#/components/schemas/Transaction"
+    StatusUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/TransferStatus"
+        deliveries:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 1
+    StatusUpdateResponse:
+      type: object
+      required: [transfer, webhook_deliveries]
+      properties:
+        transfer:
+          $ref: "#/components/schemas/Transfer"
+        webhook_deliveries:
+          type: integer
+          minimum: 0
+          maximum: 5
+    TransferStatus:
+      type: string
+      enum: [PENDING, POSTED, FAILED, RETURNED]
+    MoneyNumber:
+      type: number
+      format: double
+      minimum: 0.01
+      multipleOf: 0.01
+      example: 25.00
+    SignedMoneyNumber:
+      type: number
+      format: double
+      multipleOf: 0.01
+      example: -42.17
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: invalid_account
+        message:
+          type: string
+          example: Account not found

@@ -1,0 +1,10 @@
+# The Go API image needs only its source and SQL bootstrap assets.
+*
+!api/
+!api/**
+!database/
+!database/**
+
+# Never send generated local output even inside an included directory.
+api/coverage.out
+api/*.out
