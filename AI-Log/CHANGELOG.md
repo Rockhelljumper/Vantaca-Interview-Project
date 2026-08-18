@@ -605,3 +605,11 @@ Reviewers can start and exercise the complete synthetic integration from one roo
 - Linked the explorer from the dashboard and updated the reviewer/runtime guides with raw-spec URLs and synthetic authorization values.
 - Added parser-level OpenAPI validation, live spec/CORS/explorer API assertions, and a Chromium contract-switching test.
 - Passed Go formatting/tests/vet for both services, Vitest, TypeScript, the Next.js production build, both Compose configuration modes, all 24 Playwright tests, and the independent 17-assertion smoke suite with five healthy base containers.
+
+## 2026-08-18 — Contingent `/internal/accounts/full` architecture path
+
+- Expanded `Notes/StartHere.md` with a non-critical, feature-flagged evaluation path for the undocumented endpoint mentioned in the Northwind integration thread.
+- Kept documented `GET /accounts` as the primary account synchronization contract and contained any future internal-endpoint implementation inside the existing Northwind adapter.
+- Added a decision flow covering documentation/authorization gates, schema and sensitive-data validation, quarantine, last-known-good preservation, kill-switch behavior, and bounded return to the public path.
+- Documented the manual interoperability, authorization, semantic-parity, security, failure, performance, versioning, and support tests required before enablement.
+- Clarified why the endpoint is challenging and why it remains an asynchronous written follow-up and optional optimization rather than a two-week go-live dependency.

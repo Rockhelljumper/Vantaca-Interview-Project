@@ -27,6 +27,25 @@ The root [`compose.yaml`](../compose.yaml) is intentionally outside this folder 
 
 The browser calls only Next.js/Vantaca endpoints. The Go adapter is the only component that sees Northwind account/routing values, and those values are not persisted in the demo database.
 
+## Diagnostic logging
+
+The Go API writes each structured application event to stdout and, after SQL bootstrap, to `dbo.application_logs`. Request logs contain the method, path without query string, response status, duration, and correlation ID. Successful health probes are intentionally excluded. `dbo.vw_recent_application_errors` provides the `WARN`/`ERROR` investigation surface; for example:
+
+```sql
+SELECT TOP (100)
+    occurred_at,
+    severity,
+    event_name,
+    correlation_id,
+    username,
+    api_key_last_four,
+    attributes_json
+FROM dbo.vw_recent_application_errors
+ORDER BY occurred_at DESC;
+```
+
+Sanitization happens inside both logging handlers rather than at individual call sites. Username is retained when the upstream identity supplies one; passwords, tokens, authorization/cookie values, connection credentials, routing numbers, and raw bodies/payloads are redacted or omitted. Full account/card numbers and API keys are reduced to masked last-four values. Database-log failures fall back to the already-redacted stdout sink without recursively attempting another SQL write. Production still requires an approved retention policy, access controls, and log export/alert ownership.
+
 ## Start and test
 
 Run from the repository root:

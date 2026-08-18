@@ -15,11 +15,15 @@ import (
 	"vantaca-interview-project/Demo/api/internal/config"
 	"vantaca-interview-project/Demo/api/internal/database"
 	"vantaca-interview-project/Demo/api/internal/httpapi"
+	appLogging "vantaca-interview-project/Demo/api/internal/logging"
 	"vantaca-interview-project/Demo/api/internal/northwind"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	consoleHandler := appLogging.NewRedactingHandler(slog.NewJSONHandler(os.Stdout, nil))
+	startupLogger := slog.New(consoleHandler)
+	logger := startupLogger
+	slog.SetDefault(logger)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -48,6 +52,19 @@ func main() {
 	}
 	repository := database.NewRepository(db, cfg.DemoLinkID)
 	defer repository.Close()
+
+	databaseHandler := appLogging.NewDatabaseHandler(db, appLogging.DatabaseHandlerOptions{
+		Application:  "vantaca-api",
+		MinimumLevel: slog.LevelInfo,
+		WriteTimeout: 500 * time.Millisecond,
+		OnError: func(logErr error) {
+			// This logger has no database sink, so reporting a persistence
+			// failure cannot recurse back into the failed handler.
+			startupLogger.Error("database log persistence failed", "error", logErr)
+		},
+	})
+	logger = slog.New(appLogging.NewFanoutHandler(consoleHandler, databaseHandler))
+	slog.SetDefault(logger)
 
 	partner, err := northwind.NewClient(cfg.NorthwindBaseURL, cfg.NorthwindAPIKey, cfg.NorthwindTimeout)
 	if err != nil {

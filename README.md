@@ -84,7 +84,7 @@ All executable application source, mock code, database migrations/seeds, and aut
 - A durable local transfer intent precedes exactly one Northwind POST. A transport/5xx ambiguity becomes `UNKNOWN` and is not automatically resubmitted.
 - Unsigned demo webhooks are durable reconciliation signals, not authoritative state. The application reads the known partner transfer and applies a valid state transition.
 - Duplicate webhook deliveries collapse through a unique inbox dedupe key; `PENDING`, `POSTED`, `RETURNED`, `FAILED`, and `UNKNOWN` remain distinct user-visible states.
-- Logs use route paths/correlation IDs and omit financial request/response bodies and query-string credentials.
+- Logs use route paths/correlation IDs and omit financial request/response bodies and query-string credentials. The core API also writes sanitized structured records to SQL for correlation and error investigation; usernames remain searchable, API keys retain only their final four characters, and passwords/tokens/raw payloads are removed at the logging boundary.
 
 These behaviors are engineering evidence for the synthetic local contract. They do not prove Northwind's production semantics, Vantaca identity/authorization, approved cryptography, production scale, or operational readiness.
 

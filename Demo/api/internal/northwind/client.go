@@ -90,8 +90,8 @@ func NewClient(baseURL string, apiKey string, timeout time.Duration) (*Client, e
 	}
 
 	controlURL := baseURL
-	if strings.HasSuffix(controlURL, "/v1") {
-		controlURL = strings.TrimSuffix(controlURL, "/v1")
+	if before, ok := strings.CutSuffix(controlURL, "/v1"); ok {
+		controlURL = before
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()

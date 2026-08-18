@@ -1108,3 +1108,22 @@ Add Swagger OpenAPI so interview reviewers can see and exercise both the Northwi
 ### Outcome
 
 An interviewer can now inspect and execute either API from one local Swagger page while the raw contracts remain available directly from their owning services. This improves demo discoverability and executable-contract evidence without changing the unresolved production identity, partner, webhook, security, or operational gates.
+
+## 2026-08-18 — Document a contingent `/internal/accounts/full` path
+
+### User instruction or question
+
+Update StartHere with a path for handling the undocumented `/internal/accounts/full` endpoint from the integration thread, call out the need for manual testing and Northwind documentation, explain the architectural challenges, and keep it contingent rather than a primary focus.
+
+### Work completed
+
+- Added a dedicated subsection beneath Major Workflow 1 so the option is visible in the account architecture without becoming a new primary workflow.
+- Kept the documented `GET /accounts` contract as the default and placed any future `/internal/accounts/full` call behind a tenant/environment feature flag inside the Northwind adapter.
+- Added a Mermaid decision flow for written-contract, partner-authorization, Security, and manual-evidence gates; common normalization/persistence; nonconforming-response containment; last-known-good preservation; alerting; and bounded return to the public path.
+- Defined manual tests for caller/customer scope, credentials, schema, pagination, balance semantics, timestamps, precision, protected-data exposure, failure behavior, rate limits, parity, performance, SLA, versioning, deprecation, and support.
+- Required Northwind-authored versioned documentation and written production authorization before enablement, followed by automated contract tests, safe telemetry, and a kill switch.
+- Explicitly identified the endpoint as an asynchronous written follow-up and optional optimization that must not block the public-path implementation or the two-week launch plan.
+
+### Outcome
+
+The architecture now acknowledges the integration-thread proposal without treating an undocumented internal endpoint as a dependable contract. Vantaca can evaluate it later under controlled evidence gates while preserving the supported public path and existing customer-facing freshness semantics.

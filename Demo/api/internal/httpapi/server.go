@@ -85,9 +85,9 @@ func NewServer(
 	mux.HandleFunc("POST /api/demo/transfers/{id}/advance", server.handleAdvanceTransfer)
 	mux.HandleFunc("POST /api/internal/reconcile", server.handleInternalReconcile)
 
-	server.handler = server.recoveryMiddleware(
-		server.correlationMiddleware(
-			server.loggingMiddleware(
+	server.handler = server.correlationMiddleware(
+		server.loggingMiddleware(
+			server.recoveryMiddleware(
 				server.securityHeadersMiddleware(server.swaggerCORSMiddleware(mux)),
 			),
 		),
@@ -110,6 +110,7 @@ func (s *Server) handleHealth(writer http.ResponseWriter, request *http.Request)
 	ctx, cancel := context.WithTimeout(request.Context(), 2*time.Second)
 	defer cancel()
 	if err := s.pinger.Ping(ctx); err != nil {
+		s.logger.Error("database health check failed", "correlation_id", correlationID(request), "error", err)
 		writeError(writer, request, http.StatusServiceUnavailable, "database_unavailable", "The demo database is unavailable.")
 		return
 	}
@@ -669,8 +670,19 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 		started := time.Now()
 		recorder := &statusRecorder{ResponseWriter: writer, status: http.StatusOK}
 		next.ServeHTTP(recorder, request)
-		s.logger.Info(
-			"request",
+		if request.URL.Path == "/healthz" && recorder.status < http.StatusBadRequest {
+			return
+		}
+		level := slog.LevelInfo
+		if recorder.status >= http.StatusInternalServerError {
+			level = slog.LevelError
+		} else if recorder.status >= http.StatusBadRequest {
+			level = slog.LevelWarn
+		}
+		s.logger.Log(
+			request.Context(),
+			level,
+			"http request completed",
 			"method", request.Method,
 			"path", request.URL.Path,
 			"status", recorder.status,

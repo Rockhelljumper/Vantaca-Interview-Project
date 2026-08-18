@@ -42,21 +42,94 @@ Read-only account functionality and transfer-write functionality should be indep
 
 ```mermaid
 flowchart LR
-    Customer["Customer"] --> UI["Next.js UI"]
-    UI --> API["Go HTTP API"]
-    API --> App["Application and domain services"]
 
-    App --> Repo["Repository interfaces"]
-    Repo --> SQL[("SQL Server 2022")]
+    %% =========================================
+    %% External Callers
+    %% =========================================
 
-    App --> Adapter["Northwind adapter"]
-    Adapter --> Northwind["Northwind Connect API"]
+    Customer["Customer"]
+    UI["Next.js UI"]
+    N8N["n8n<br/>(Optional Scheduler)"]
 
-    Northwind --> Webhook["Webhook ingress"]
-    Webhook --> Inbox["Durable webhook inbox"]
-    Inbox --> App
+    NorthwindWebhook["Northwind Connect API<br/>(Webhook Caller)"]
 
-    N8N["n8n optional scheduler"] -.-> App
+    Customer --> UI
+
+
+    %% =========================================
+    %% Go Application Boundary
+    %% =========================================
+
+    subgraph Go_App["Go Application Boundary"]
+        direction TB
+
+        subgraph API_Layer["Go HTTP API Layer"]
+            direction LR
+
+            API["Standard API Endpoints"]
+
+            Ingress["Webhook Ingress Endpoint"]
+        end
+
+        App["Application Services<br/>(Use Cases)"]
+
+        Domain["Domain Services<br/>& Entities"]
+
+        Repo["Repository Interfaces"]
+
+        Adapter["Northwind Adapter"]
+
+        Worker["Webhook Processing Worker<br/>(Background Goroutine)"]
+
+
+        API --> App
+
+        Ingress -->|"Validate / Accept"| App
+
+        App -.->|"Spawn Goroutine"| Worker
+
+        App --> Domain
+
+        App --> Repo
+
+        App --> Adapter
+    end
+
+
+    %% =========================================
+    %% External Dependencies
+    %% =========================================
+
+    NorthwindAPI["Northwind Connect API<br/>(External Service)"]
+
+    SQL[("SQL Server 2022")]
+
+
+    %% =========================================
+    %% Calls INTO Go Application
+    %% =========================================
+
+    UI -->|"API Request"| API
+
+    N8N -.->|"Scheduled API Call"| API
+
+    NorthwindWebhook ==>|"HTTP POST Webhook"| Ingress
+
+
+    %% =========================================
+    %% Calls OUT OF Go Application
+    %% =========================================
+
+    Adapter -->|"Outbound API Request"| NorthwindAPI
+
+
+    %% =========================================
+    %% Persistence
+    %% =========================================
+
+    Repo --> SQL
+
+    Worker ==>|"Direct Database Update"| SQL
 ```
 
 ## Immediate two-week critical path
@@ -93,26 +166,33 @@ A failed HTTP exchange does not prove a transfer was not created. Vantaca can pr
 ```mermaid
 sequenceDiagram
     autonumber
+
     actor Customer
     participant UI as Next.js UI
-    participant App as Vantaca Go service
+    participant App as Vantaca Go Service
     participant DB as SQL Server
     participant NW as Northwind
 
     Customer->>UI: Confirm transfer
-    UI->>App: Submit with Vantaca request ID
-    App->>DB: Persist local transfer intent
-    App->>NW: POST transfer
+    UI->>App: Submit transfer with Vantaca request ID
 
-    alt Definitive Northwind response
-        NW-->>App: Transfer ID and PENDING status
-        App->>DB: Record partner ID and state
-        App-->>UI: Accepted and pending
+    App->>DB: Persist local transfer intent
+    DB-->>App: Intent persisted
+
+    App->>NW: POST transfer request
+
+    alt Northwind returns definitive response
+        NW-->>App: Transfer ID + PENDING status
+        App->>DB: Save Northwind transfer ID and status
+        DB-->>App: Transfer updated
+        App-->>UI: Transfer accepted and pending
+
     else Timeout or response lost
-        Note over App,NW: Timeout or response lost; partner outcome is unknown
-        App->>DB: Mark UNKNOWN
-        App-->>UI: Submission needs verification
-        Note over App,NW: Do not automatically resubmit without proven partner idempotency
+        Note over App,NW: Northwind outcome is unknown
+        App->>DB: Mark transfer status as UNKNOWN
+        DB-->>App: Transfer updated
+        App-->>UI: Transfer submitted but requires verification
+        Note over App,NW: Do not automatically resubmit unless Northwind guarantees idempotency
     end
 ```
 
